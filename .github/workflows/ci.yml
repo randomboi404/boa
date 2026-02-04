@@ -1,4 +1,4 @@
-name: Manual Build Boa CLI (Linux)
+name: Build Boa CLI (with 'process' feature)
 
 on:
   workflow_dispatch:
@@ -8,11 +8,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.5
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -22,10 +25,21 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Build boa_cli
+      - name: Build boa_cli (with feature)
+        env:
+          RUSTC_WRAPPER: sccache
+          RUSTFLAGS: "-C debuginfo=0"
         run: |
-          cargo build -p boa_cli --release
+          cargo build \
+            -p boa_cli \
+            --release \
+            --features process
+
+      - name: Strip binary
+        run: strip target/release/boa
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
