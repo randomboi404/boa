@@ -11,13 +11,12 @@
 pub(crate) mod tests;
 
 use boa_engine::{
-    Context, JsData, JsObject, JsResult, JsString, JsSymbol, JsValue, js_string,
+    Context, JsData, JsError, JsObject, JsResult, JsString, JsSymbol, JsValue, js_string,
     native_function::NativeFunction, object::ObjectInitializer, property::Attribute,
-    property::PropertyDescriptor,
 };
 use boa_gc::{Finalize, Trace};
-use rustc_hash::FxHashMap;
-use std::{cell::RefCell, rc::Rc};
+use std::collections::HashMap;
+use std::rc::Rc;
 
 /// A trait that can be used to forward process provider to an implementation.  
 pub trait ProcessProvider: Trace {
@@ -27,11 +26,11 @@ pub trait ProcessProvider: Trace {
     /// Returns an error if the current directory cannot be obtained.  
     fn cwd(&self) -> JsResult<JsString>;
 
-    /// Get a HashMap of environment variables so as to allow env property (`process.env`)  
+    /// Get a `HashMap` of environment variables so as to allow env property (`process.env`)  
     ///  
     /// # Errors  
     /// Returns an error if the environment variables cannot be obtained.  
-    fn env(&self) -> JsResult<FxHashMap<String, String>>;
+    fn env(&self) -> JsResult<HashMap<String, String>>;
 }
 
 /// The default std implementation of the process provider.  
@@ -43,12 +42,12 @@ pub struct StdProcessProvider;
 
 impl ProcessProvider for StdProcessProvider {
     fn cwd(&self) -> JsResult<JsString> {
-        let path =
-            std::env::current_dir().map_err(|e| JsError::from_opaque(js_string!(e.to_string())))?;
+        let path = std::env::current_dir()
+            .map_err(|e| JsError::from_opaque(js_string!(e.to_string()).into()))?;
         Ok(js_string!(path.to_string_lossy()))
     }
 
-    fn env(&self) -> JsResult<FxHashMap<String, String>> {
+    fn env(&self) -> JsResult<HashMap<String, String>> {
         Ok(std::env::vars().collect())
     }
 }
@@ -96,22 +95,26 @@ impl Process {
             )?;
         }
 
-        ObjectInitializer::new(context)
+        Ok(ObjectInitializer::new(context)
             .property(
                 JsSymbol::to_string_tag(),
                 Self::NAME,
                 Attribute::CONFIGURABLE,
             )
-            .property(js_string!("env"), env, Attribute::all())
+            .property(
+                js_string!("env"),
+                env,
+                Attribute::WRITABLE | Attribute::CONFIGURABLE,
+            )
             .function(
                 process_method(
-                    |_, _, provider, context| provider.cwd().map(JsValue::from),
+                    |_, _, provider, _| provider.cwd().map(JsValue::from),
                     provider.clone(),
                 ),
                 js_string!("cwd"),
                 0,
             )
-            .build()
+            .build())
     }
 
     /// Register the `process` object globally by a custom provider.  
