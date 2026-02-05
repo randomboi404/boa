@@ -2,6 +2,10 @@ name: Build Boa CLI (with 'process' feature)
 
 on:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
   build-linux:
